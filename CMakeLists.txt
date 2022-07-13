@@ -146,13 +146,14 @@ else()
 	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=-mf16c")
 	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=-Wno-float-conversion")
 	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=-fno-strict-aliasing")
+	list(APPEND CUDA_NVCC_FLAGS "-Xcudafe=--diag_suppress=unrecognized_gcc_pragma")
 endif()
 list(APPEND CUDA_NVCC_FLAGS "--extended-lambda")
 list(APPEND CUDA_NVCC_FLAGS "--expt-relaxed-constexpr")
 
 
 ###############################################################################
-# Include files
+# Dependencies
 ###############################################################################
 
 if (MSVC)
@@ -164,6 +165,9 @@ find_library(
 	${CUDA_TOOLKIT_ROOT_DIR}/lib64
 	${CUDA_TOOLKIT_ROOT_DIR}/lib
 )
+
+set(BUILD_SHARED_LIBS OFF)
+add_subdirectory("dependencies/fmt")
 
 ###############################################################################
 # tiny-cuda-nn library, samples, and benchmarks
@@ -187,7 +191,7 @@ set(TCNN_SOURCES
 	src/reduce_sum.cu
 )
 
-if (MIN_GPU_ARCH GREATER_EQUAL 70)
+if (MIN_GPU_ARCH GREATER 70)
 	list(APPEND TCNN_SOURCES src/fully_fused_mlp.cu)
 endif()
 
@@ -203,8 +207,9 @@ target_include_directories(tiny-cuda-nn PUBLIC
 	"dependencies"
 	"dependencies/cutlass/include"
 	"dependencies/cutlass/tools/util/include"
+	"dependencies/fmt/include"
 )
-target_link_libraries(tiny-cuda-nn PUBLIC ${CUDA_LIBRARIES} cuda cublas)
+target_link_libraries(tiny-cuda-nn PUBLIC ${CUDA_LIBRARIES} cuda cublas fmt)
 
 if (TCNN_BUILD_EXAMPLES)
 	add_subdirectory("samples")

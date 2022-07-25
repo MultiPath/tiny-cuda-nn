@@ -72,7 +72,7 @@ using network_precision_t = std::conditional_t<TCNN_HALF_PRECISION, __half, floa
 //             problems with mixed-precision training.
 // using network_precision_t = float;
 
-// #define TCNN_VERBOSE_MEMORY_ALLOCS
+#define TCNN_VERBOSE_MEMORY_ALLOCS
 
 enum class Activation {
 	ReLU,

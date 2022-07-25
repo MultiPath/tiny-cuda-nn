@@ -50,6 +50,7 @@ enum class GridType {
 	Hash,
 	Dense,
 	Tiled,
+	Volume,
 };
 
 inline GridType string_to_grid_type(const std::string& grid_type) {
@@ -59,6 +60,8 @@ inline GridType string_to_grid_type(const std::string& grid_type) {
 		return GridType::Dense;
 	} else if (equals_case_insensitive(grid_type, "Tiled") || equals_case_insensitive(grid_type, "Tile")) {
 		return GridType::Tiled;
+	} else if (equals_case_insensitive(grid_type, "Volume")) {
+		return GridType::Volume;
 	}
 
 	throw std::runtime_error{fmt::format("Invalid grid type: {}", grid_type)};
@@ -69,6 +72,7 @@ inline std::string to_string(GridType grid_type) {
 		case GridType::Hash: return "Hash";
 		case GridType::Dense: return "Dense";
 		case GridType::Tiled: return "Tiled";
+		case GridType::Volume: return "Volume";
 		default: throw std::runtime_error{"Invalid grid type."};
 	}
 }
@@ -91,6 +95,17 @@ __device__ uint32_t fast_hash(const uint32_t pos_grid[N_DIMS]) {
 	return result;
 }
 
+template <uint32_t N_DIMS>
+__device__ uint32_t volume_hash(const uint32_t pos_grid[N_DIMS], const uint32_t hashmap_size) {
+	uint32_t volume_res = (uint32_t)std::cbrt(hashmap_size);
+	uint32_t result = 0;
+	#pragma unroll
+	for (uint32_t i = 0; i < N_DIMS; ++i) {
+		result = result * volume_res + pos_grid[i] % volume_res;
+	}
+	return result;
+}
+
 template <uint32_t N_DIMS, uint32_t N_FEATURES_PER_LEVEL>
 __device__ uint32_t grid_index(const GridType grid_type, const uint32_t feature, const uint32_t hashmap_size, const uint32_t grid_resolution, const uint32_t pos_grid[N_DIMS]) {
 	uint32_t stride = 1;
@@ -107,6 +122,11 @@ __device__ uint32_t grid_index(const GridType grid_type, const uint32_t feature,
 		index = fast_hash<N_DIMS>(pos_grid);
 	}
 
+	if (grid_type == GridType::Volume) {
+		index = volume_hash<N_DIMS>(pos_grid, hashmap_size);
+	}
+
+	// printf("Hashmapsize %d %f %d \n", hashmap_size, std::cbrt(hashmap_size), grid_resolution);
 	return (index % hashmap_size) * N_FEATURES_PER_LEVEL + feature;
 }
 
@@ -900,7 +920,7 @@ public:
 
 			if (grid_type == GridType::Dense) {
 				// No-op
-			} else if (grid_type == GridType::Tiled) {
+			} else if ((grid_type == GridType::Tiled) || (grid_type == GridType::Volume)) {
 				// If tiled grid needs fewer params than dense, then use fewer and tile.
 				params_in_level = std::min(params_in_level, powi(base_resolution, N_POS_DIMS));
 			} else if (grid_type == GridType::Hash) {
@@ -1360,7 +1380,9 @@ template <typename T, uint32_t N_FEATURES_PER_LEVEL>
 GridEncoding<T>* create_grid_encoding_templated(uint32_t n_dims_to_encode, const json& encoding) {
 	const uint32_t log2_hashmap_size = encoding.value("log2_hashmap_size", 19u);
 	const std::string encoding_type = encoding.value("otype", "Grid");
-	const std::string default_type = equals_case_insensitive(encoding_type, "TiledGrid") ? "Tiled" : (equals_case_insensitive(encoding_type, "DenseGrid") ? "Dense" : "Hash");
+	const std::string default_type = equals_case_insensitive(encoding_type, "TiledGrid") ? "Tiled" : 
+		(equals_case_insensitive(encoding_type, "DenseGrid") ? "Dense" : 
+		(equals_case_insensitive(encoding_type, "VolumeGrid") ? "Volume" : "Hash"));
 
 	uint32_t n_features;
 	if (encoding.contains("n_features") || encoding.contains("n_grid_features")) {
